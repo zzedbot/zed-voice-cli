@@ -1,0 +1,26 @@
+# Claude Code local settings (may contain tokens, IPs, command history)
+.claude/
+
+# Local configuration files
+*.local.*
+.env
+
+# Dependencies
+node_modules/
+
+# Temp / runtime files
+runner.sh
+/tmp/zed-voice/
+
+# OS / Editor
+.DS_Store
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+
+# Python cache
+__pycache__/
+*.pyc

@@ -1,0 +1,335 @@
+const blessed = require('blessed');
+const path = require('path');
+
+class TUI {
+  constructor(config) {
+    this.config = config;
+    this.state = 'IDLE';
+    this.mode = config.mode || 'vad';
+    this.history = [];
+    this.screen = blessed.screen({
+      smartCSR: true,
+      fullUnicode: true,
+      autoPadding: true,
+      dockBorders: false,
+      mouse: true,
+    });
+
+    this._buildLayout();
+    this._registerKeys();
+    this._registerMouse();
+  }
+
+  _buildLayout() {
+    const screenH = this.screen.height;
+    const screenW = this.screen.width;
+
+    const statusBarH = 4;
+    const actionBarH = 3;
+    const contentH = screenH - statusBarH - actionBarH;
+
+    // === Top bar: version, mode, state ===
+    this.topBar = blessed.box({
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: statusBarH,
+      tags: true,
+      style: {
+        fg: 'black',
+        bg: 'white',
+        border: { fg: 'white' },
+      },
+      border: { type: 'line' },
+      content: ' ' + this._topBarContent() + ' ',
+    });
+
+    // === Left: Virtual avatar ===
+    this.avatarBox = blessed.box({
+      top: statusBarH,
+      left: 0,
+      width: '35%',
+      height: contentH,
+      tags: true,
+      scrollable: false,
+      style: {
+        fg: 'cyan',
+        bg: 'black',
+        border: { fg: 'cyan' },
+      },
+      border: { type: 'line' },
+      label: ' 虚拟形象 ',
+      content: this._avatarContent(),
+    });
+
+    // === Right: Conversation history ===
+    this.historyBox = blessed.box({
+      top: statusBarH,
+      left: '35%',
+      width: '65%',
+      height: contentH,
+      tags: true,
+      scrollable: true,
+      alwaysScroll: true,
+      mouse: true,
+      keys: true,
+      style: {
+        fg: 'white',
+        bg: 'black',
+        border: { fg: 'gray' },
+      },
+      border: { type: 'line' },
+      label: ' 对话 ',
+      content: '',
+    });
+
+    // === Bottom: Action bar ===
+    this.bottomBar = blessed.box({
+      bottom: 0,
+      left: 0,
+      width: '100%',
+      height: actionBarH,
+      tags: true,
+      style: {
+        fg: 'white',
+        bg: 'black',
+        border: { fg: 'gray' },
+      },
+      border: { type: 'line' },
+      content: ' ' + this._bottomBarContent() + ' ',
+    });
+
+    this.screen.append(this.topBar);
+    this.screen.append(this.avatarBox);
+    this.screen.append(this.historyBox);
+    this.screen.append(this.bottomBar);
+  }
+
+  _avatarContent() {
+    const faces = {
+      IDLE: '(o_o)',
+      RECORDING: '(oOo)',
+      THINKING: '(o_o)...',
+      PROCESSING: '(-_-)',
+      PLAYING: '(o^o)',
+      ERROR: '(x_x)',
+    };
+    const face = faces[this.state] || '(o_o)';
+    const labels = {
+      IDLE: '就绪',
+      RECORDING: '录音中',
+      THINKING: '思考中',
+      PROCESSING: '处理中',
+      PLAYING: '播放中',
+      ERROR: '出错了',
+    };
+    const label = labels[this.state] || '就绪';
+    return ` ${face}\n ${label}\n\n [虚拟形象]\n   待开发`;
+  }
+
+  _handleShortcut(action) {
+    switch (action) {
+      case 'exit':
+        this.destroy();
+        process.exit(0);
+        break;
+      case 'mode':
+        if (this.onModeSwitch) {
+          const modes = ['ptt', 'vad', 'duplex'];
+          const idx = (modes.indexOf(this.mode) + 1) % modes.length;
+          this.onModeSwitch(modes[idx]);
+        }
+        break;
+      case 'clear':
+        this.history = [];
+        this.historyBox.setContent('');
+        this.screen.render();
+        break;
+      case 'ptt':
+        if (this.onEnter) this.onEnter();
+        break;
+      case 'mute':
+        if (this.onMute) this.onMute();
+        break;
+    }
+  }
+
+  _registerKeys() {
+    this.screen.key(['q', 'C-c'], () => {
+      this.destroy();
+      process.exit(0);
+    });
+
+    this.screen.key(['m', 'M'], () => {
+      if (this.onModeSwitch) {
+        const modes = ['ptt', 'vad', 'duplex'];
+        const idx = (modes.indexOf(this.mode) + 1) % modes.length;
+        this.onModeSwitch(modes[idx]);
+      }
+    });
+
+    this.screen.key('C-l', () => {
+      this.history = [];
+      this.historyBox.setContent('');
+      this.screen.render();
+    });
+
+    this.screen.key(['s', 'S'], () => {
+      if (this.mode === 'duplex' && this.onMute) {
+        this.onMute();
+      }
+    });
+
+    this.screen.key(['enter', 'return'], () => {
+      if (this.mode === 'ptt' && this.onEnter) {
+        this.onEnter();
+      }
+    });
+
+    // Also listen on raw stdin as backup
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(true);
+    }
+    process.stdin.resume();
+    process.stdin.on('data', (data) => {
+      const key = data.toString('utf-8');
+
+      if (key === 'q' || key === '\x03') {
+        this.destroy();
+        process.exit(0);
+        return;
+      }
+
+      if (key === 'm' || key === 'M') {
+        if (this.onModeSwitch) {
+          const modes = ['ptt', 'vad', 'duplex'];
+          const idx = (modes.indexOf(this.mode) + 1) % modes.length;
+          this.onModeSwitch(modes[idx]);
+        }
+        return;
+      }
+
+      if (key === '\x0c') {
+        this.history = [];
+        this.historyBox.setContent('');
+        this.screen.render();
+        return;
+      }
+
+      if ((key === 's' || key === 'S') && this.mode === 'duplex' && this.onMute) {
+        this.onMute();
+        return;
+      }
+
+      if ((key === '\r' || key === '\n') && this.mode === 'ptt') {
+        if (this.onEnter) {
+          this.onEnter();
+          return;
+        }
+      }
+    });
+  }
+
+  _registerMouse() {
+    // No click handlers — screen is too small, clicks are unreliable
+  }
+
+  _topBarContent() {
+    const modeLabels = { ptt: 'PTT', vad: 'VAD', duplex: 'DUPLEX' };
+    const stateLabels = {
+      IDLE: this.mode === 'ptt' ? '按Enter录音' : '请说话',
+      RECORDING: '录音中',
+      THINKING: '思考中',
+      PROCESSING: '处理中',
+      PLAYING: '播放中',
+      ERROR: '错误',
+    };
+    const label = stateLabels[this.state] || '就绪';
+    const version = require('../package.json').version;
+    return ` ZedVoice v${version} | ${modeLabels[this.mode]} | ${label}`;
+  }
+
+  _bottomBarContent() {
+    const modeHints = {
+      ptt: 'Q:退出  M:模式  Enter:录音',
+      vad: 'Q:退出  M:模式  自动录音',
+      duplex: 'Q:退出  M:模式  S:静音  可打断',
+    };
+    return modeHints[this.mode] || 'Q:退出  M:模式';
+  }
+
+  // --- Public API ---
+
+  render() {
+    this.screen.render();
+  }
+
+  destroy() {
+    try {
+      this.screen.destroy();
+    } catch {}
+    process.stdout.write('\x1b[?25h');
+    process.stdout.write('\x1b[0m');
+    process.stdout.write('\x1b[2J');
+    process.stdout.write('\x1b[H');
+  }
+
+  setStatus(state) {
+    this.state = state;
+    this.topBar.setContent(' ' + this._topBarContent() + ' ');
+    this.avatarBox.setContent(this._avatarContent());
+    this.screen.render();
+  }
+
+  setMode(mode) {
+    this.mode = mode;
+    this.topBar.setContent(' ' + this._topBarContent() + ' ');
+    this.bottomBar.setContent(' ' + this._bottomBarContent() + ' ');
+    this.screen.render();
+  }
+
+  updateAudioLevel(level) {
+    if (this.state === 'RECORDING') {
+      this.avatarBox.setContent(this._avatarContent());
+      this.screen.render();
+    }
+  }
+
+  setPlaybackProgress(pct) {
+    const bar = '>'.repeat(Math.floor(pct / 5)) + '.'.repeat(20 - Math.floor(pct / 5));
+    this.bottomBar.setContent(' 播放中 ' + bar + ' ' + Math.round(pct) + '%');
+    this.screen.render();
+  }
+
+  addUserMessage(text) {
+    this.history.push('{green-fg}你:{/green-fg} ' + text);
+    this.historyBox.setContent(this.history.join('\n'));
+    this.historyBox.scrollTo(this.historyBox.getScrollHeight(), 0);
+    this.screen.render();
+  }
+
+  addAiMessage(text) {
+    this.history.push('{yellow-fg}Zed:{/yellow-fg} ' + text);
+    this.historyBox.setContent(this.history.join('\n'));
+    this.historyBox.scrollTo(this.historyBox.getScrollHeight(), 0);
+    this.screen.render();
+  }
+
+  setCurrentAction(text) {
+    this.avatarBox.setContent(' ' + text);
+    this.screen.render();
+  }
+
+  setError(text) {
+    this.setStatus('ERROR');
+    this.bottomBar.setContent(' 错误: ' + text);
+    this.screen.render();
+  }
+
+  setHints(hints) {
+    this.bottomBar.setContent('  ' + hints.join('  '));
+    this.screen.render();
+  }
+}
+
+module.exports = TUI;

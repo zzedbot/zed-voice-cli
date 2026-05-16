@@ -1,0 +1,23 @@
+{
+  "name": "zed-voice-cli",
+  "version": "0.1.0",
+  "description": "Voice interaction CLI for OpenClaw - Push-to-Talk, VAD, and Full Duplex modes",
+  "main": "src/index.js",
+  "bin": {
+    "zed-voice": "src/index.js"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "test:recorder": "node src/index.js --test-record",
+    "test:stt": "node src/index.js --test-stt",
+    "test:tts": "node src/index.js --test-tts"
+  },
+  "dependencies": {
+    "blessed": "^0.1.81",
+    "commander": "^12.0.0",
+    "ws": "^8.16.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
