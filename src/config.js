@@ -28,7 +28,7 @@ function loadConfig(cliOpts = {}) {
     stt: {
       command: cliOpts.sttCommand || process.env.ZED_VOICE_STT_COMMAND || 'python',
       script: path.join(__dirname, 'whisper-stt.py'),
-      model: cliOpts.sttModel || process.env.ZED_VOICE_STT_MODEL || 'small',
+      model: cliOpts.sttModel || process.env.ZED_VOICE_STT_MODEL || 'tiny',
       language: cliOpts.language || process.env.ZED_VOICE_LANGUAGE || 'zh',
     },
     // TTS settings
