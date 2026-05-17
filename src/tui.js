@@ -106,6 +106,14 @@ class TUI {
       ERROR: '出错了',
     };
     const label = labels[this.state] || '就绪';
+
+    // In PTT mode, show a record button
+    if (this.mode === 'ptt') {
+      const btnLabel = this.state === 'RECORDING' ? '■ 停止' : '● 录音';
+      const btnState = this.state === 'RECORDING' ? 'PLAYING' : 'IDLE';
+      return `${face}\n${label}\n\n{${this.state === 'RECORDING' ? 'red-bg' : 'green-bg'}}{black-fg} ${btnLabel} {/${this.state === 'RECORDING' ? 'red-bg' : 'green-bg'}}{/black-fg}`;
+    }
+
     return `${face}\n${label}`;
   }
 
@@ -186,6 +194,13 @@ class TUI {
   }
 
   _registerMouse() {
+    // Avatar panel: in PTT mode, click to toggle record
+    this.avatarBox.on('click', () => {
+      if (this.mode === 'ptt' && this.onEnter) {
+        this.onEnter();
+      }
+    });
+
     // Bottom bar: detect which hint segment was clicked
     this.bottomBar.on('click', (data) => {
       this._handleBottomBarClick(data.x);
@@ -226,7 +241,7 @@ class TUI {
       ptt: [
         { label: 'Q退出', action: 'exit' },
         { label: 'M模式', action: 'mode' },
-        { label: 'Enter录音', action: 'ptt' },
+        { label: '点击录音', action: 'ptt' },
       ],
       vad: [
         { label: 'Q退出', action: 'exit' },
@@ -256,7 +271,7 @@ class TUI {
   _topBarContent() {
     const modeLabels = { ptt: 'PTT', vad: 'VAD', duplex: 'DUPLEX' };
     const stateLabels = {
-      IDLE: this.mode === 'ptt' ? '按Enter录音' : '请说话',
+      IDLE: this.mode === 'ptt' ? '点击录音' : '请说话',
       RECORDING: '录音中',
       THINKING: '思考中',
       PROCESSING: '处理中',
@@ -269,7 +284,7 @@ class TUI {
 
   _bottomBarContent() {
     const hints = {
-      ptt: 'Q退出  M模式  Enter录音',
+      ptt: 'Q退出  M模式  点击录音',
       vad: 'Q退出  M模式  自动录音',
       duplex: 'Q退出  M模式  S静音  可打断',
     };
@@ -327,8 +342,33 @@ class TUI {
   }
 
   setCurrentAction(text) {
-    this.avatarBox.setContent(text);
+    if (this.mode === 'ptt') {
+      // In PTT mode, prepend action text above the record button
+      const face = this._getFace();
+      const label = this._getStatusLabel();
+      const btnLabel = this.state === 'RECORDING' ? '■ 停止' : '● 录音';
+      const bgColor = this.state === 'RECORDING' ? 'red' : 'green';
+      this.avatarBox.setContent(`${text}\n\n{${bgColor}-bg}{black-fg} ${btnLabel} {/${bgColor}-bg}{/black-fg}`);
+    } else {
+      this.avatarBox.setContent(text);
+    }
     this.screen.render();
+  }
+
+  _getFace() {
+    const faces = {
+      IDLE: '(o_o)', RECORDING: '(oOo)', THINKING: '(o_o)...',
+      PROCESSING: '(-_-)', PLAYING: '(o^o)', ERROR: '(x_x)',
+    };
+    return faces[this.state] || '(o_o)';
+  }
+
+  _getStatusLabel() {
+    const labels = {
+      IDLE: '就绪', RECORDING: '录音中', THINKING: '思考中',
+      PROCESSING: '处理中', PLAYING: '播放中', ERROR: '出错了',
+    };
+    return labels[this.state] || '就绪';
   }
 
   setError(text) {
