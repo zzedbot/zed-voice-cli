@@ -30,12 +30,29 @@ async function startDuplex(config, tui = null, abortSignal = null) {
   }
 
   let currentPlayback = null;
+  let activeRecorder = null;
+  let interruptRecorder = null;
 
   // Create WebSocket connection
   const ws = require('../gateway').createWsConnection(config);
   config._gwConn = ws;
 
-  // Handle Ctrl+C
+  // Abort handler: stop any active recording on mode switch
+  if (abortSignal) {
+    abortSignal.addEventListener('abort', () => {
+      if (activeRecorder) {
+        if (activeRecorder.stop) try { activeRecorder.stop(); } catch {}
+        if (activeRecorder.process && !activeRecorder.process.killed) try { activeRecorder.process.kill('SIGKILL'); } catch {}
+      }
+      if (interruptRecorder) {
+        if (interruptRecorder.stop) try { interruptRecorder.stop(); } catch {}
+        if (interruptRecorder.process && !interruptRecorder.process.killed) try { interruptRecorder.process.kill('SIGKILL'); } catch {}
+      }
+      if (currentPlayback) currentPlayback.stop();
+      ws.close();
+      delete config._gwConn;
+    });
+  }
   process.on('SIGINT', () => {
     if (tui) tui.destroy();
     console.log('\n👋 再见');
@@ -53,6 +70,7 @@ async function startDuplex(config, tui = null, abortSignal = null) {
 
     try {
       const recorder = recordUntilStopped(config, audioPath);
+      interruptRecorder = recorder;
 
       const timeout = new Promise((_, reject) => {
         setTimeout(() => reject(new Error('timeout')), 2000);
@@ -60,6 +78,7 @@ async function startDuplex(config, tui = null, abortSignal = null) {
 
       await Promise.race([recorder.promise, timeout]);
       recorder.stop();
+      interruptRecorder = null;
 
       if (fs.existsSync(audioPath)) {
         const stats = fs.statSync(audioPath);
@@ -96,7 +115,10 @@ async function startDuplex(config, tui = null, abortSignal = null) {
 
       const audioPath = path.join(config.tmpDir, `duplex-${Date.now()}.wav`);
       if (tui) tui.setStatus('RECORDING');
-      const recordedPath = await recordWithSilenceDetection(config, audioPath);
+      const rec = recordWithSilenceDetection(config, audioPath);
+      activeRecorder = rec;
+      const recordedPath = await rec.promise;
+      activeRecorder = null;
 
       if (abortSignal && abortSignal.aborted) {
         ws.close();

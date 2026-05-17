@@ -44,6 +44,11 @@ async function startPtt(config, tui = null, abortSignal = null) {
     // Handle abort signal for mode switching
     if (abortSignal) {
       abortSignal.addEventListener('abort', () => {
+        // Stop any active recording
+        if (tui._pttState && tui._pttState.recorder) {
+          try { tui._pttState.recorder.stop(); } catch {}
+          try { if (!tui._pttState.recorder.process.killed) tui._pttState.recorder.process.kill('SIGKILL'); } catch {}
+        }
         gwConn.close();
         delete config._gwConn;
         tui._pttState = null;

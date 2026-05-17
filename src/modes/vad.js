@@ -93,6 +93,7 @@ async function vadConversationLoop(config, tui = null, abortSignal = null) {
   if (!tui) console.log('🎙️  请说话...');
 
   const audioPath = path.join(config.tmpDir, `vad-${Date.now()}.wav`);
+  let recorder = null;
 
   try {
     // Record with silence detection
@@ -100,8 +101,19 @@ async function vadConversationLoop(config, tui = null, abortSignal = null) {
       tui.setStatus('RECORDING');
       tui.setCurrentAction('🎙️  请说话...');
     }
-    const recordedPath = await recordWithSilenceDetection(config, audioPath);
 
+    // Abort handler: stop recording when mode is switched
+    const onAbort = () => {
+      if (recorder && recorder.process && !recorder.process.killed) {
+        recorder.process.forceStop();
+      }
+    };
+    if (abortSignal) abortSignal.addEventListener('abort', onAbort, { once: true });
+
+    recorder = recordWithSilenceDetection(config, audioPath);
+    const recordedPath = await recorder.promise;
+
+    if (abortSignal) abortSignal.removeEventListener('abort', onAbort);
     if (abortSignal && abortSignal.aborted) {
       throw new DOMException('Mode switched', 'AbortError');
     }
@@ -114,10 +126,17 @@ async function vadConversationLoop(config, tui = null, abortSignal = null) {
       tui.setCurrentAction('请说话...');
     }
   } catch (err) {
-    if (err.message.includes('too small')) {
+    if (abortSignal && abortSignal.aborted) {
+      throw new DOMException('Mode switched', 'AbortError');
+    }
+    if (err.message && err.message.includes('too small')) {
       if (!tui) console.log('⚠️  录音太短，继续监听...');
     } else {
       throw err;
+    }
+  } finally {
+    if (abortSignal) {
+      // Listener already set to { once: true }, safe to remove
     }
   }
 }

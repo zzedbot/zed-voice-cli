@@ -181,7 +181,11 @@ async function recordFixedDuration(config, outputPath, durationSec) {
   });
 }
 
-async function recordWithSilenceDetection(config, outputPath, silenceDuration = 1.5, silenceThreshold = -40) {
+/**
+ * Record with VAD (silence detection). Returns { promise, process }.
+ * Call process.forceStop() to kill ffmpeg immediately (e.g. on mode switch).
+ */
+function recordWithSilenceDetection(config, outputPath, silenceDuration = 1.5, silenceThreshold = -40) {
   const args = [
     '-y',
     ...getFfmpegInputArgs(config),
@@ -192,21 +196,26 @@ async function recordWithSilenceDetection(config, outputPath, silenceDuration = 
     outputPath,
   ];
   log('VAD recording: threshold=%sdB, duration=%ds', silenceThreshold, silenceDuration);
-  return new Promise((resolve, reject) => {
-    const proc = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'], shell: false });
-    let silenceDetected = false;
-    proc.stderr.on('data', (data) => {
-      const text = data.toString();
-      if (debug.isEnabled() && (text.includes('size=') || text.includes('time='))) {
-        log('ffmpeg: %s', text.trim());
-      }
-      if (text.includes('silence_start')) log('Silence started');
-      if (!silenceDetected && text.includes('silence_end')) {
-        silenceDetected = true;
-        log('Silence ended, stopping...');
-        setTimeout(() => killProcess(proc.pid), 500);
-      }
-    });
+
+  const proc = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'], shell: false });
+  let silenceDetected = false;
+
+  proc.stderr.on('data', (data) => {
+    const text = data.toString();
+    if (debug.isEnabled() && (text.includes('size=') || text.includes('time='))) {
+      log('ffmpeg: %s', text.trim());
+    }
+    if (text.includes('silence_start')) log('Silence started');
+    if (!silenceDetected && text.includes('silence_end')) {
+      silenceDetected = true;
+      log('Silence ended, stopping...');
+      setTimeout(() => {
+        if (!proc.killed) killProcess(proc.pid);
+      }, 500);
+    }
+  });
+
+  const promise = new Promise((resolve, reject) => {
     proc.on('close', (code) => {
       log('VAD closed (code: %d, silenceDetected: %s)', code, silenceDetected);
       if (fs.existsSync(outputPath)) {
@@ -221,8 +230,10 @@ async function recordWithSilenceDetection(config, outputPath, silenceDuration = 
       log.error('VAD error: %s', err.message);
       reject(err);
     });
-    proc.forceStop = () => killProcess(proc.pid);
   });
+
+  proc.forceStop = () => killProcess(proc.pid);
+  return { promise, process: proc };
 }
 
 module.exports = {
