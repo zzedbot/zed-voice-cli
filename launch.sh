@@ -49,7 +49,7 @@ if [ -n "$DEVICE" ]; then
 fi
 
 # --- 4. Launch xterm with inline node command (root connects to zedmini's X session) ---
-xterm -hold -name zedvoice -geometry 80x24 -e /bin/bash -c "
+xterm -hold -name zedvoice -geometry 80x24 -fa "Noto Sans Mono" -fs 12 -e /bin/bash -c "
   export NODE_TLS_REJECT_UNAUTHORIZED=0
   export PATH=\"/root/.nvm/versions/node/v24.15.0/bin:\$PATH\"
   export DISPLAY=:0
