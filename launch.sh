@@ -9,8 +9,8 @@
 # Node.js 位于 /root/.nvm 下，必须以 root 身份运行。
 #
 # 用法:
-#   sudo ./launch.sh                    # 默认 VAD 模式，本地 Gateway
-#   sudo ./launch.sh ptt                # PTT 模式
+#   sudo ./launch.sh                    # 默认 PTT 模式，本地 Gateway
+#   sudo ./launch.sh vad                # VAD 模式
 #   sudo ./launch.sh duplex             # 全双工模式
 #   sudo ./launch.sh ptt hw:1           # 指定录音设备
 #   sudo ./launch.sh vad http://HOST:PORT  # 自定义 Gateway
@@ -26,7 +26,7 @@ export DISPLAY=:0
 
 NODE="/root/.nvm/versions/node/v24.15.0/bin/node"
 APP_DIR="/claude/workspace/zed-voice-cli"
-MODE="${1:-vad}"
+MODE="${1:-ptt}"
 GATEWAY="${2:-http://192.168.1.9:18789}"
 DEVICE="${3:-}"
 

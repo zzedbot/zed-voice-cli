@@ -54,7 +54,7 @@ npm link   # 使 zed-voice 命令全局可用
 ## 快速开始
 
 ```bash
-# 默认 VAD 模式（推荐）
+# 默认 PTT 模式（推荐）
 zed-voice
 
 # 按键说话模式
@@ -91,7 +91,7 @@ Gateway 使用 WebSocket RPC 协议通信（非 HTTP）。支持两种认证方�
 
 | 选项 | 环境变量 | 默认值 | 说明 |
 |------|----------|--------|------|
-| `-m, --mode <mode>` | `ZED_VOICE_MODE` | `vad` | 交互模式：`ptt`、`vad`、`duplex` |
+| `-m, --mode <mode>` | `ZED_VOICE_MODE` | `ptt` | 交互模式：`ptt`、`vad`、`duplex` |
 | `-g, --gateway <url>` | `ZED_VOICE_GATEWAY` | `https://zedbot.kingdee.space/` | OpenClaw Gateway 地址 |
 | `--gateway-ws <url>` | `ZED_VOICE_GATEWAY_WS` | 自动推导 | Gateway WebSocket 地址 |
 | `-t, --token <token>` | `ZED_VOICE_TOKEN` | 从 openclaw.json 读取 | Gateway 认证令牌 |
@@ -181,8 +181,8 @@ Gateway 使用 WebSocket RPC 协议通信（非 HTTP）。支持两种认证方�
 ### 启动方式
 
 ```bash
-sudo ./launch.sh              # 默认 VAD 模式
-sudo ./launch.sh ptt          # PTT 模式
+sudo ./launch.sh              # 默认 PTT 模式
+sudo ./launch.sh vad          # VAD 模式
 sudo ./launch.sh duplex       # 全双工模式
 sudo ./launch.sh vad http://HOST:PORT  # 自定义 Gateway
 ```

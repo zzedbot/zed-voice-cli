@@ -148,7 +148,7 @@ npm link   # 使 zed-voice 命令全局可用
 ## 使用方式
 
 ```bash
-zed-voice                          # 默认 VAD 模式
+zed-voice                          # 默认 PTT 模式
 zed-voice --mode ptt               # 对讲机模式
 zed-voice --mode vad               # VAD 模式
 zed-voice --mode duplex            # 全双工模式
