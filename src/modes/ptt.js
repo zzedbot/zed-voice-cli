@@ -3,6 +3,7 @@ const { processTurn } = require('../conversation');
 const { recordUntilStopped } = require('../recorder');
 const { createConnection } = require('../gateway');
 const debug = require('../debug');
+const { stopWhisperService } = require('../stt');
 
 const log = debug.createLogger('ptt');
 
@@ -51,6 +52,7 @@ async function startPtt(config, tui = null, abortSignal = null) {
         }
         gwConn.close();
         delete config._gwConn;
+        stopWhisperService();
         tui._pttState = null;
         tui.onEnter = null;
       });

@@ -1,12 +1,43 @@
-const { execSync } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const fs = require('fs');
+const path = require('path');
 const debug = require('./debug');
 
 const log = debug.createLogger('stt');
 
+// Persistent whisper service process (model loaded once, reused across transcriptions)
+let whisperService = null;
+
 /**
- * Transcribe audio file using openai-whisper Python API.
- * Calls whisper-stt.py wrapper to bypass broken CLI issues.
+ * Get or start the persistent whisper service process.
+ */
+function getWhisperService() {
+  if (whisperService && !whisperService.killed) {
+    return whisperService;
+  }
+
+  const script = path.join(__dirname, 'whisper-stt.py');
+  const proc = spawn('python3', [script, '--service'], {
+    stdio: ['pipe', 'pipe', 'pipe'],
+    shell: false,
+  });
+
+  proc.on('error', (err) => {
+    log.error('Whisper service error: %s', err.message);
+  });
+
+  proc.on('close', (code) => {
+    log('Whisper service exited (code: %d)', code);
+    if (whisperService === proc) whisperService = null;
+  });
+
+  log('Started whisper service (pid: %d)', proc.pid);
+  whisperService = proc;
+  return proc;
+}
+
+/**
+ * Transcribe audio file using the persistent whisper service.
  */
 async function transcribe(config, audioPath) {
   if (!fs.existsSync(audioPath)) {
@@ -21,44 +52,61 @@ async function transcribe(config, audioPath) {
     return '';
   }
 
-  const cmd = config.stt.command;
-  const script = config.stt.script;
   const model = config.stt.model;
   const language = config.stt.language;
+  const command = `transcribe "${audioPath}" ${model} ${language}`;
 
-  const fullCmd = `${cmd} "${script}" "${audioPath}" --model ${model} --language ${language}`;
-  log('Running: %s', fullCmd);
-
+  log('Service command: %s', command);
   const startTime = Date.now();
 
-  try {
-    const output = execSync(fullCmd, {
-      encoding: 'utf-8',
-      timeout: 120000,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
+  return new Promise((resolve, reject) => {
+    const proc = getWhisperService();
+    const timeout = setTimeout(() => {
+      reject(new Error('whisper transcription timed out (120s)'));
+    }, 120000);
 
-    const elapsed = Date.now() - startTime;
-    log('Transcription done in %dms', elapsed);
-    const text = output.trim();
-    log('Result: %s', text.slice(0, 200));
-    return text;
-  } catch (err) {
-    const elapsed = Date.now() - startTime;
-    const stderr = err.stderr || '';
+    const onData = (data) => {
+      const text = data.toString('utf-8').trim();
+      log('Whisper service response: %s', text.slice(0, 200));
+      clearTimeout(timeout);
+      proc.stdout.removeListener('data', onData);
 
-    if (err.signal === 'SIGTERM' || err.signal === 'SIGKILL') {
-      throw new Error('whisper transcription timed out');
-    }
-    if (stderr.includes('ModuleNotFoundError') && stderr.includes('whisper')) {
-      throw new Error(`openai-whisper not installed. Run: pip3 install openai-whisper`);
-    }
-    if (stderr.includes('file') && stderr.includes('not found')) {
-      throw new Error(`Model "${model}" not found. It will be auto-downloaded on first use.`);
-    }
-    log.error('Transcription failed in %dms: %s', elapsed, err.message);
-    throw new Error(`whisper transcription failed: ${stderr.slice(0, 500) || err.message}`);
+      if (text.startsWith('OK: ')) {
+        const result = text.slice(4);
+        const elapsed = Date.now() - startTime;
+        log('Transcription done in %dms', elapsed);
+        resolve(result);
+      } else if (text.startsWith('ERR: ')) {
+        const errMsg = text.slice(5);
+        if (errMsg.includes('ModuleNotFoundError') || errMsg.includes('No module')) {
+          reject(new Error('openai-whisper not installed. Run: pip3 install openai-whisper'));
+        } else {
+          reject(new Error(`whisper error: ${errMsg}`));
+        }
+      } else {
+        reject(new Error(`Unexpected whisper service response: ${text}`));
+      }
+    };
+
+    proc.stdout.on('data', onData);
+    proc.stdin.write(command + '\n');
+  });
+}
+
+/**
+ * Stop the persistent whisper service.
+ */
+function stopWhisperService() {
+  if (whisperService && !whisperService.killed) {
+    try { whisperService.stdin.write('exit\n'); } catch {}
+    setTimeout(() => {
+      if (!whisperService.killed) {
+        try { whisperService.kill('SIGKILL'); } catch {}
+      }
+      whisperService = null;
+    }, 2000);
   }
+  whisperService = null;
 }
 
 /**
@@ -66,18 +114,18 @@ async function transcribe(config, audioPath) {
  */
 async function ensureModelDownloaded(config) {
   const cmd = config.stt.command;
-
   try {
     execSync(`${cmd} -c "import whisper; print('whisper version:', whisper.__version__)"`, {
       stdio: ['pipe', 'pipe', 'ignore'],
       timeout: 5000,
     });
   } catch {
-    throw new Error(`openai-whisper not found. Install with: pip3 install openai-whisper`);
+    throw new Error('openai-whisper not found. Install with: pip3 install openai-whisper');
   }
 }
 
 module.exports = {
   transcribe,
   ensureModelDownloaded,
+  stopWhisperService,
 };

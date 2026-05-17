@@ -2,6 +2,7 @@ const path = require('path');
 const { recordWithSilenceDetection } = require('../recorder');
 const { processTurn } = require('../conversation');
 const { createConnection } = require('../gateway');
+const { stopWhisperService } = require('../stt');
 
 /**
  * Start VAD (Voice Activity Detection) mode.
@@ -54,7 +55,7 @@ async function startVad(config, tui = null, abortSignal = null) {
     abortSignal.addEventListener('abort', () => {
       gwConn.close();
       delete config._gwConn;
-      // AbortController.abort() will cause the next await to throw AbortError
+      stopWhisperService();
     });
   }
 

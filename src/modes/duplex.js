@@ -7,6 +7,7 @@ const { playAudio, playAudioWithControl } = require('../player');
 const { recordUntilStopped, recordWithSilenceDetection } = require('../recorder');
 const { processTurn, cleanupFile } = require('../conversation');
 const debug = require('../debug');
+const { stopWhisperService } = require('../stt');
 
 const log = debug.createLogger('duplex');
 
@@ -51,6 +52,7 @@ async function startDuplex(config, tui = null, abortSignal = null) {
       if (currentPlayback) currentPlayback.stop();
       ws.close();
       delete config._gwConn;
+      stopWhisperService();
     });
   }
   process.on('SIGINT', () => {
