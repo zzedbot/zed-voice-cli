@@ -200,6 +200,9 @@ async function startDuplex(config, tui = null, abortSignal = null) {
       }
     } catch (err) {
       if (err.name === 'AbortError') throw err;
+      if (abortSignal && abortSignal.aborted) {
+        throw new DOMException('Mode switched', 'AbortError');
+      }
       if (currentPlayback) {
         currentPlayback.stop();
         currentPlayback = null;

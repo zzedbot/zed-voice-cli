@@ -69,6 +69,9 @@ async function startVad(config, tui = null, abortSignal = null) {
       await vadConversationLoop(config, tui, abortSignal);
     } catch (err) {
       if (err.name === 'AbortError') throw err;
+      if (abortSignal && abortSignal.aborted) {
+        throw new DOMException('Mode switched', 'AbortError');
+      }
       const msg = `错误: ${err.message}`;
       if (tui) {
         tui.setError(msg);
