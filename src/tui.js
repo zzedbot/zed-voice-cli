@@ -16,6 +16,7 @@ class TUI {
 
     this._buildLayout();
     this._registerKeys();
+    this._registerMouse();
   }
 
   _buildLayout() {
@@ -182,6 +183,74 @@ class TUI {
         this.onEnter(); return;
       }
     });
+  }
+
+  _registerMouse() {
+    // Bottom bar: detect which hint segment was clicked
+    this.bottomBar.on('click', (data) => {
+      this._handleBottomBarClick(data.x);
+    });
+
+    // Top bar: click on mode name to cycle modes
+    this.topBar.on('click', (data) => {
+      this._handleTopBarClick(data.x);
+    });
+
+    // Screen-level click as fallback for resize detection
+    this.screen.on('click', () => { this.screen.render(); });
+  }
+
+  _handleBottomBarClick(col) {
+    const content = this._bottomBarContent();
+    const segments = this._parseBottomBarSegments(content);
+    for (const seg of segments) {
+      if (col >= seg.start && col <= seg.end) {
+        this._handleShortcut(seg.action);
+        return;
+      }
+    }
+  }
+
+  _handleTopBarClick(col) {
+    const modeLabels = { ptt: 'PTT', vad: 'VAD', duplex: 'DUPLEX' };
+    const current = modeLabels[this.mode];
+    const idx = this._topBarContent().indexOf(current);
+    if (col >= idx && col <= idx + current.length) {
+      this._handleShortcut('mode');
+    }
+  }
+
+  _parseBottomBarSegments(content) {
+    const segments = [];
+    const modeDefs = {
+      ptt: [
+        { label: 'Q退出', action: 'exit' },
+        { label: 'M模式', action: 'mode' },
+        { label: 'Enter录音', action: 'ptt' },
+      ],
+      vad: [
+        { label: 'Q退出', action: 'exit' },
+        { label: 'M模式', action: 'mode' },
+        { label: '自动录音', action: 'ptt' },
+      ],
+      duplex: [
+        { label: 'Q退出', action: 'exit' },
+        { label: 'M模式', action: 'mode' },
+        { label: 'S静音', action: 'mute' },
+        { label: '可打断', action: 'ptt' },
+      ],
+    };
+
+    const defs = modeDefs[this.mode] || modeDefs.vad;
+    let pos = 0;
+    for (const def of defs) {
+      const start = content.indexOf(def.label, pos);
+      if (start >= 0) {
+        segments.push({ start, end: start + def.label.length, action: def.action });
+        pos = start + def.label.length;
+      }
+    }
+    return segments;
   }
 
   _topBarContent() {
